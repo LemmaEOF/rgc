@@ -8,7 +8,7 @@ extends Object
 
 enum TokenType {
 	# single-char tokens
-	LEFT_BRACE, RIGHT_BRACE, COMMA,
+	LEFT_BRACE, RIGHT_BRACE, BREAK,
 	# literals
 	STRING, NUMBER,
 	# keywords
@@ -65,21 +65,22 @@ class Scanner:
 	func _is_at_end() -> bool:
 		return _current >= _source.length()
 	
-	func _scan_token():
+	func _scan_token() -> void:
 		var c: String = _advance()
 		match c:
 			'{':
 				_add_token(TokenType.LEFT_BRACE)
 			'}':
 				_add_token(TokenType.RIGHT_BRACE)
-			',':
-				_add_token(TokenType.COMMA)
+			';':
+				_add_token(TokenType.BREAK)
 			'#':
 				while _peek() != '\n' and !_is_at_end():
 					_advance()
 			' ', '\r', '\t':
 				pass
 			'\n':
+				_add_token(TokenType.BREAK)
 				_line += 1
 			'"':
 				_string()
@@ -93,7 +94,7 @@ class Scanner:
 				else:
 					printerr("Unexpected character '{}' on line {}".format([c, _line]))
 	
-	func _string():
+	func _string() -> void:
 		while _peek() != '"' and !_is_at_end():
 			if _peek() == '\n':
 				_line += 1
@@ -109,7 +110,7 @@ class Scanner:
 		var value: String = _source.substr(_start + 1, _current - 1)
 		_add_token_l(TokenType.STRING, value)
 		
-	func _identifier():
+	func _identifier() -> void:
 		while _is_alphanumeric(_peek()):
 			_advance()
 		
@@ -119,7 +120,7 @@ class Scanner:
 		else:
 			_add_token_l(TokenType.STRING, value)
 		
-	func _number():
+	func _number() -> void:
 		var is_float = false
 		
 		while _peek().is_valid_int():
@@ -137,7 +138,7 @@ class Scanner:
 		else:
 			_add_token_l(TokenType.NUMBER, _source.substr(_start, _current).to_int())
 	
-	func _negative_number():
+	func _negative_number() -> void:
 		var is_float = false
 		_advance()
 
@@ -156,10 +157,10 @@ class Scanner:
 		else:
 			_add_token_l(TokenType.NUMBER, _source.substr(_start+1, _current).to_int() * -1)
 	
-	func _add_token(type: TokenType):
+	func _add_token(type: TokenType) -> void:
 		_add_token_l(type, null)
 	
-	func _add_token_l(type: TokenType, literal: Variant):
+	func _add_token_l(type: TokenType, literal: Variant) -> void:
 		var text: String = _source.substr(_start, _current)
 		_tokens.append(Token.new(type, text, literal, _line))
 	
