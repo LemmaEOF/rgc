@@ -6,6 +6,10 @@ extends Object
 # (I think this might actually be a regular language!),
 # but it's Good Enough For Now!
 
+# TODO: actual error-handling instead of just printing an error and continuing
+# TODO: document and clean up this mess
+# TODO: spin out impl classes to separate files?
+
 enum TokenType {
 	# single-char tokens
 	LEFT_BRACE, RIGHT_BRACE, BREAK,
@@ -30,11 +34,11 @@ class Token:
 		self.literal = literal
 		self.line = line
 
-#TODO: impl
 static func parse(chart: String) -> Chart:
 	var scanner: Scanner = Scanner.new(chart)
 	var tokens: Array[Token] = scanner.scan()
-	return null
+	var parser: Parser = Parser.new(tokens)
+	return parser.parse()
 
 class Scanner:
 	extends RefCounted
@@ -185,3 +189,121 @@ class Scanner:
 	
 	func _is_alphanumeric(chr: String) -> bool:
 		return chr.is_valid_int() or _is_alpha(chr)
+
+class Parser:
+	extends RefCounted
+	
+	var _tokens: Array[Token]
+	var _current: int = 0
+	
+	var _charter: String
+	var _offset: float
+	var _rating: float
+	var _notes: Array[Note] = []
+	
+	func _init(tokens: Array[Token]):
+		self._tokens = tokens
+	
+	func parse() -> Chart:
+		while !_is_at_end(): # TODO: is this what I want?
+			_parse_property()
+			_consume(TokenType.BREAK)
+		if _charter == null:
+			printerr("Chart does not define charter")
+			return null
+		if _offset == null:
+			printerr("Chart does not define offset")
+			return null
+		if _rating == null:
+			printerr("Chart does not define rating")
+			return null
+		if _notes.size() == 0:
+			printerr("Chart has no notes")
+			return null
+		return Chart.new(_charter, _offset, _rating, _notes)
+	
+	func _parse_property() -> void:
+		var t = _peek()
+		match t.type:
+			TokenType.CHARTER:
+				var val = _consume(TokenType.STRING)
+				if val == null or !(val is String):
+					printerr("Bad value type for charter at line {} - expected string, got {}".format([t.line, t.lexeme]))
+				else:
+					_charter = val as String
+			TokenType.OFFSET:
+				var val = _consume(TokenType.NUMBER)
+				if val == null or !(val is float or val is int):
+					printerr("Bad value type for offset at line {} - expected float, got {}".format([t.line, t.lexeme]))
+				else:
+					_offset = val as float
+			TokenType.RATING:
+				var val = _consume(TokenType.NUMBER)
+				if val == null or !(val is float or val is int):
+					printerr("Bad value type for rating at line {} - expected float, got {}".format([t.line, t.lexeme]))
+				else:
+					_rating = val as float
+			TokenType.NOTES:
+				_parse_notes()
+			TokenType.BREAK:
+				pass
+			_:
+				printerr("Unexpected token {} for top-level property at line {}: must be charter, offset, rating, or notes".format([t.lexeme, t.line]))
+	
+	func _parse_notes() -> void:
+		_consume(TokenType.LEFT_BRACE)
+		_consume(TokenType.BREAK)
+		while !_is_at_end() and !_match([TokenType.RIGHT_BRACE]):
+			_parse_note()
+		_advance()
+	
+	func _parse_note() -> void:
+		var type_name = _consume(TokenType.STRING) as String
+		var type = NoteType.get_type(type_name)
+		if type == null:
+			printerr("Note type {} not registered".format(type_name))
+			_seek(TokenType.BREAK)
+		else:
+			var beat = _consume(TokenType.NUMBER) as float
+			var args: Array = []
+			while _match([TokenType.STRING, TokenType.NUMBER]):
+				args.append(_peek().literal)
+			if args.size() < type.get_minimum_arguments():
+				printerr("Not enough arguments for note type {}: required {}, got {}".format([type_name, type.get_minimum_arguments(), args.size()]))
+			_notes.append(Note.new(type, beat, args))
+			_consume(TokenType.BREAK)
+	
+	func _match(types: Array[TokenType]) -> bool:
+		for type in types:
+			if _check(type):
+				_advance()
+				return true
+		return false
+	
+	func _check(type: TokenType) -> bool:
+		if _is_at_end():
+			return false
+		return _peek().type == type
+	
+	func _advance() -> Token:
+		if !_is_at_end():
+			_current += 1
+		return _previous()
+	
+	func _is_at_end() -> bool:
+		return _peek().type == TokenType.EOF
+	
+	func _peek() -> Token:
+		return _tokens[_current]
+	
+	func _previous() -> Token:
+		return _tokens[_current-1]
+	
+	func _consume(type: TokenType) -> Variant:
+		if _check(type):
+			return _advance().literal
+		return null
+	
+	func _seek(type: TokenType) -> void:
+		while !_is_at_end() and !_match([type]):
+			_advance()

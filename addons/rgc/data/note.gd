@@ -1,5 +1,5 @@
 class_name Note
-extends RefCounted
+extends RefCounted # TODO: make a Resource for editor loading?
 
 var type: NoteType
 var beat: float
